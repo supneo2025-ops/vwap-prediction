@@ -413,6 +413,7 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
     pred_time_col = 'pred_datetime_15min'
 
     if pred_col in df.columns and pred_time_col in df.columns:
+        # Plot predictions at their prediction time (15 min ahead)
         x_pred = df[pred_time_col]
         # Smooth predictions with a short rolling mean to reduce noise
         y_pred = df[pred_col].rolling(window=5, min_periods=1).mean()
@@ -433,7 +434,7 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
         hovertemplate=f'<b>Actual</b><br>Time: %{{x}}<br>{vwap_type.upper()}: %{{y:.2f}}B<extra></extra>'
     ))
 
-    # Prediction line (dashed, extends into future)
+    # Prediction line (plotted at prediction time, 15 min ahead)
     if x_pred is not None and y_pred is not None:
         traces.append(go.Scatter(
             x=x_pred,

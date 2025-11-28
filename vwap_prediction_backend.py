@@ -243,8 +243,12 @@ class VWAPPredictionBackend:
             row_data[f'bu_pred_{horizon}min'] = pred.bu_pred
             row_data[f'sd_pred_{horizon}min'] = pred.sd_pred
             row_data[f'busd_pred_{horizon}min'] = pred.busd_pred
-            # Add prediction datetime (15 minutes into future) using actual market time
-            row_data[f'pred_datetime_{horizon}min'] = actual_datetime + pd.Timedelta(minutes=horizon)
+            # Calculate prediction datetime by adding horizon to effective timestamp,
+            # then converting back to actual datetime (skips lunch break automatically)
+            pred_effective_ms = effective_timestamp + (horizon * 60 * 1000)
+            row_data[f'pred_datetime_{horizon}min'] = self._get_actual_datetime_from_effective(
+                pred_effective_ms, actual_datetime
+            )
 
         # Append to timeseries
         self.timeseries_data.append(row_data)
@@ -296,6 +300,36 @@ class VWAPPredictionBackend:
             return lunch_start_ms
 
         return actual_timestamp - (lunch_end_ms - lunch_start_ms)
+
+    def _get_actual_datetime_from_effective(self, effective_timestamp_ms: int, reference_datetime: pd.Timestamp) -> pd.Timestamp:
+        """
+        Convert lunch-compressed effective timestamp back to actual datetime.
+
+        This reverses the lunch break compression applied by _get_effective_timestamp.
+
+        Args:
+            effective_timestamp_ms: Lunch-compressed timestamp in milliseconds
+            reference_datetime: Reference datetime for getting the day (Asia/Bangkok timezone)
+
+        Returns:
+            Actual datetime with lunch break un-compressed
+        """
+        day_start = reference_datetime.normalize()
+
+        lunch_start = day_start + pd.Timedelta(hours=self.lunch_start_hour, minutes=self.lunch_start_minute)
+        lunch_end = day_start + pd.Timedelta(hours=self.lunch_end_hour, minutes=self.lunch_end_minute)
+
+        lunch_start_ms = int(lunch_start.value // 1_000_000)
+        lunch_gap_ms = (self.lunch_end_hour * 60 + self.lunch_end_minute -
+                       self.lunch_start_hour * 60 - self.lunch_start_minute) * 60 * 1000
+
+        if effective_timestamp_ms <= lunch_start_ms:
+            # Before lunch break - no adjustment needed
+            return pd.to_datetime(effective_timestamp_ms, unit='ms', utc=True).tz_convert('Asia/Bangkok')
+        else:
+            # After lunch break - add back the 90-minute gap
+            actual_ms = effective_timestamp_ms + lunch_gap_ms
+            return pd.to_datetime(actual_ms, unit='ms', utc=True).tz_convert('Asia/Bangkok')
 
     def run(self):
         """

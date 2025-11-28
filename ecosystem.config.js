@@ -31,7 +31,7 @@ module.exports = {
       watch: false,  // Set to true to auto-restart on file changes
       max_restarts: 10,
       min_uptime: '10s',
-      restart_delay: 4000,
+      restart_delay: 8000,  // Increased to avoid port conflicts
 
       // Logging
       error_file: '/Users/m2/PycharmProjects/vwap_prediction/logs/vwap-frontend-error.log',
@@ -50,7 +50,7 @@ module.exports = {
       max_memory_restart: '1G',
 
       // Kill timeout
-      kill_timeout: 5000,
+      kill_timeout: 10000,  // Increased to allow port release
 
       // Process control
       listen_timeout: 10000,
