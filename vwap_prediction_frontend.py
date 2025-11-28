@@ -50,7 +50,13 @@ def get_available_days():
         parts = f.stem.split('_')
         if len(parts) >= 3:
             date_str = f"{parts[0]}-{parts[1]}-{parts[2]}"
-            days.append(date_str)
+            try:
+                year = int(parts[0])
+                month = int(parts[1])
+            except ValueError:
+                continue
+            if year > 2025 or (year == 2025 and month >= 5):
+                days.append(date_str)
     return sorted(days, reverse=True)  # Most recent first
 
 
@@ -103,97 +109,117 @@ available_days = get_available_days()
 
 # App layout
 app.layout = html.Div([
-    html.H1("VWAP Prediction Dashboard", style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
+    html.H2(
+        "VWAP Prediction Dashboard",
+        style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '10px'}
+    ),
 
     # Controls Panel
     html.Div([
-        html.H3("Dashboard Controls", style={'color': '#34495e', 'marginBottom': '15px'}),
+        # Day selector
         html.Div([
-            # Day selector
-            html.Div([
-                html.Label("Trading Day:", style={'fontWeight': 'bold', 'marginRight': '10px'}),
-                dcc.Dropdown(
-                    id='day-selector',
-                    options=[{'label': day, 'value': day} for day in available_days],
-                    value=available_days[0] if available_days else None,
-                    style={'width': '200px', 'display': 'inline-block'}
-                )
-            ], style={'display': 'inline-block', 'marginRight': '30px'}),
+            html.Label("Trading Day", style={'fontWeight': 'bold', 'fontSize': '13px'}),
+            dcc.Dropdown(
+                id='day-selector',
+                options=[{'label': day, 'value': day} for day in available_days],
+                value=available_days[0] if available_days else None,
+                style={'width': '190px'}
+            )
+        ], style={'minWidth': '190px'}),
 
-            # Speed selector
-            html.Div([
-                html.Label("Replay Speed:", style={'fontWeight': 'bold', 'marginRight': '10px'}),
-                dcc.Slider(
-                    id='speed-input',
-                    min=1,
-                    max=100,
-                    step=1,
-                    value=5,
-                    marks={
-                        1: '1x',
-                        5: '5x',
-                        10: '10x',
-                        25: '25x',
-                        50: '50x',
-                        100: '100x'
-                    },
-                    tooltip={"placement": "bottom", "always_visible": True}
-                ),
-                html.Div(id='speed-display', style={'marginTop': '5px', 'fontSize': '14px', 'fontWeight': 'bold', 'color': '#2980b9'})
-            ], style={'display': 'inline-block', 'marginRight': '30px', 'width': '300px'}),
-
-            # Update button
-            html.Button(
-                'Update Dashboard',
-                id='update-button',
-                n_clicks=0,
-                style={
-                    'backgroundColor': '#3498db',
-                    'color': 'white',
-                    'border': 'none',
-                    'padding': '10px 20px',
-                    'borderRadius': '5px',
-                    'cursor': 'pointer',
-                    'fontSize': '14px',
-                    'fontWeight': 'bold'
-                }
+        # Speed selector
+        html.Div([
+            html.Label("Replay Speed", style={'fontWeight': 'bold', 'fontSize': '13px'}),
+            dcc.Slider(
+                id='speed-input',
+                min=1,
+                max=100,
+                step=1,
+                value=25,
+                marks={
+                    1: '1x',
+                    5: '5x',
+                    10: '10x',
+                    25: '25x',
+                    50: '50x',
+                    100: '100x'
+                },
+                tooltip={"placement": "bottom", "always_visible": True}
             ),
+            html.Div(
+                id='speed-display',
+                style={
+                    'marginTop': '4px',
+                    'fontSize': '12px',
+                    'fontWeight': 'bold',
+                    'color': '#2980b9'
+                }
+            )
+        ], style={'flex': '1', 'minWidth': '250px'}),
 
-            # Status message
-            html.Div(id='update-status', style={'display': 'inline-block', 'marginLeft': '20px', 'color': '#27ae60', 'fontWeight': 'bold'})
-        ], style={'display': 'flex', 'alignItems': 'center'})
-    ], style={'padding': '15px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px', 'margin': '10px'}),
+        # Update button
+        html.Button(
+            'Update',
+            id='update-button',
+            n_clicks=0,
+            style={
+                'backgroundColor': '#3498db',
+                'color': 'white',
+                'border': 'none',
+                'padding': '8px 16px',
+                'borderRadius': '4px',
+                'cursor': 'pointer',
+                'fontSize': '13px',
+                'fontWeight': 'bold'
+            }
+        ),
+
+        # Status message
+        html.Div(
+            id='update-status',
+            style={'color': '#27ae60', 'fontWeight': 'bold', 'fontSize': '12px'}
+        )
+    ], style={
+        'display': 'flex',
+        'flexWrap': 'wrap',
+        'gap': '15px',
+        'alignItems': 'center',
+        'padding': '10px',
+        'backgroundColor': '#ecf0f1',
+        'borderRadius': '6px',
+        'margin': '10px 0'
+    }),
 
     # Live Statistics
-    html.Div([
-        html.H3("Live Statistics", style={'color': '#34495e'}),
-        html.Div(id='stats-display', style={'fontSize': '14px', 'fontFamily': 'monospace'})
-    ], style={'padding': '10px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px', 'margin': '10px'}),
+    html.Div(id='stats-display', style={
+        'padding': '8px 12px',
+        'backgroundColor': '#ecf0f1',
+        'borderRadius': '6px',
+        'margin': '0 0 15px 0',
+        'fontSize': '13px'
+    }),
 
     # BU VWAP Chart
     html.Div([
-        html.H3("BU VWAP - Actual vs 15-Min Prediction", style={'color': '#34495e', 'marginTop': '20px'}),
-        dcc.Graph(id='bu-vwap-chart', style={'height': '400px'}),
-    ], style={'padding': '10px'}),
+        dcc.Graph(id='bu-vwap-chart', style={'height': '380px'}),
+    ], style={'padding': '0 10px 20px'}),
 
     # SD VWAP Chart
     html.Div([
-        html.H3("SD VWAP - Actual vs 15-Min Prediction", style={'color': '#34495e', 'marginTop': '20px'}),
-        dcc.Graph(id='sd-vwap-chart', style={'height': '400px'}),
-    ], style={'padding': '10px'}),
+        dcc.Graph(id='sd-vwap-chart', style={'height': '380px'}),
+    ], style={'padding': '0 10px 20px'}),
 
     # BUSD VWAP Chart
     html.Div([
-        html.H3("BUSD VWAP (BU - SD) - Actual vs 15-Min Prediction", style={'color': '#34495e', 'marginTop': '20px'}),
-        dcc.Graph(id='busd-vwap-chart', style={'height': '400px'}),
-    ], style={'padding': '10px'}),
+        dcc.Graph(id='busd-vwap-chart', style={'height': '380px'}),
+    ], style={'padding': '0 10px 20px'}),
 
     # Legend
     html.Div([
         html.P("Chart Legend:", style={'fontSize': '12px', 'color': '#7f8c8d', 'fontWeight': 'bold'}),
         html.Ul([
             html.Li("Solid line: Current detected VWAP", style={'color': '#3498db'}),
-            html.Li("Dashed line: 15-minute prediction (extends into future)", style={'color': '#e74c3c'}),
+            html.Li("Dot markers: 15-minute prediction (extends into future)", style={'color': '#e74c3c'}),
         ], style={'fontSize': '12px', 'color': '#7f8c8d'})
     ], style={'padding': '20px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px', 'margin': '20px'}),
 
@@ -298,13 +324,12 @@ def update_stats(n):
 
     if df is None or df.empty:
         return html.Div([
-            html.P("⏳ Waiting for data from backend...", style={'color': '#e67e22', 'fontSize': '16px'}),
-            html.P("Make sure the backend is running and processing data.", style={'color': '#95a5a6'})
-        ])
+            html.Span("⏳ Waiting for data from backend...", style={'color': '#e67e22', 'fontWeight': 'bold'}),
+            html.Span("Ensure the backend replay is running.", style={'color': '#95a5a6', 'marginLeft': '6px'})
+        ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '6px'})
 
     # Calculate statistics
     last_row = df.iloc[-1]
-    total_rows = len(df)
 
     # Get latest values
     bu_current = last_row['bu_current']
@@ -324,36 +349,26 @@ def update_stats(n):
         sd_rate = rate_row.get('sd_rate', 0.0)
         busd_rate = rate_row.get('busd_rate', 0.0)
 
-    stats_content = [
+    stats_content = html.Div([
         html.Div([
-            html.Span("📊 Total Data Points: ", style={'fontWeight': 'bold'}),
-            html.Span(f"{total_rows:,}", style={'color': '#27ae60'})
-        ]),
+            html.Span("🕒 Last update:", style={'fontWeight': 'bold', 'color': '#2c3e50'}),
+            html.Span(str(last_row['datetime']), style={'color': '#2980b9', 'marginLeft': '6px'})
+        ], style={'marginRight': '18px'}),
         html.Div([
-            html.Span("🕒 Latest Time: ", style={'fontWeight': 'bold'}),
-            html.Span(str(last_row['datetime']), style={'color': '#2980b9'})
-        ]),
+            html.Span("Rates (B/min):", style={'fontWeight': 'bold', 'color': '#2c3e50', 'marginRight': '6px'}),
+            html.Span(f"BU {bu_rate:+.2f}", style={'color': '#3498db', 'marginRight': '10px'}),
+            html.Span(f"SD {sd_rate:+.2f}", style={'color': '#e74c3c', 'marginRight': '10px'}),
+            html.Span(f"BUSD {busd_rate:+.2f}", style={'color': '#9b59b6'})
+        ], style={'marginRight': '18px'}),
         html.Div([
-            html.Span("🔵 BU VWAP: ", style={'fontWeight': 'bold'}),
-            html.Span(f"{bu_current:.2f} B", style={'color': '#3498db', 'fontSize': '16px'}),
-            html.Span(f" → {bu_pred_15min:.2f} B (15min)", style={'color': '#95a5a6', 'fontSize': '14px'}),
-            html.Span(f" | Rate: {bu_rate:+.2f} B/min", style={'color': '#7f8c8d', 'fontSize': '12px', 'marginLeft': '10px'})
-        ]),
-        html.Div([
-            html.Span("🔴 SD VWAP: ", style={'fontWeight': 'bold'}),
-            html.Span(f"{sd_current:.2f} B", style={'color': '#e74c3c', 'fontSize': '16px'}),
-            html.Span(f" → {sd_pred_15min:.2f} B (15min)", style={'color': '#95a5a6', 'fontSize': '14px'}),
-            html.Span(f" | Rate: {sd_rate:+.2f} B/min", style={'color': '#7f8c8d', 'fontSize': '12px', 'marginLeft': '10px'})
-        ]),
-        html.Div([
-            html.Span("💹 BUSD VWAP: ", style={'fontWeight': 'bold'}),
-            html.Span(f"{busd_current:.2f} B", style={'color': '#9b59b6', 'fontSize': '16px'}),
-            html.Span(f" → {busd_pred_15min:.2f} B (15min)", style={'color': '#95a5a6', 'fontSize': '14px'}),
-            html.Span(f" | Rate: {busd_rate:+.2f} B/min", style={'color': '#7f8c8d', 'fontSize': '12px', 'marginLeft': '10px'})
-        ]),
-    ]
+            html.Span("15m change:", style={'fontWeight': 'bold', 'color': '#2c3e50', 'marginRight': '6px'}),
+            html.Span(f"BU {bu_pred_15min - bu_current:+.2f}B", style={'color': '#3498db', 'marginRight': '10px'}),
+            html.Span(f"SD {sd_pred_15min - sd_current:+.2f}B", style={'color': '#e74c3c', 'marginRight': '10px'}),
+            html.Span(f"BUSD {busd_pred_15min - busd_current:+.2f}B", style={'color': '#9b59b6'})
+        ])
+    ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '12px', 'alignItems': 'center'})
 
-    return html.Div(stats_content, style={'lineHeight': '2'})
+    return stats_content
 
 
 def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
@@ -381,7 +396,6 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
             )
         }
 
-    # Get full day range from data
     if 'datetime' in df.columns:
         x_actual = df['datetime']
         # Set x-axis range for full trading day (9:00 - 15:00)
@@ -402,7 +416,8 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
 
     if pred_col in df.columns and pred_time_col in df.columns:
         x_pred = df[pred_time_col]
-        y_pred = df[pred_col]
+        # Smooth predictions with a short rolling mean to reduce noise
+        y_pred = df[pred_col].rolling(window=5, min_periods=1).mean()
     else:
         x_pred = None
         y_pred = None
@@ -425,9 +440,15 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
         traces.append(go.Scatter(
             x=x_pred,
             y=y_pred,
-            mode='lines',
+            mode='markers',
             name=f'15-min Prediction',
-            line=dict(color=color_pred, width=2, dash='dash'),
+            marker=dict(
+                color=color_pred,
+                size=2.5,
+                symbol='circle',
+                line=dict(color=color_pred, width=1)
+            ),
+            opacity=0.8,
             hovertemplate=f'<b>15-min Pred</b><br>Time: %{{x}}<br>{vwap_type.upper()}: %{{y:.2f}}B<extra></extra>'
         ))
 
@@ -435,7 +456,6 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
     layout = go.Layout(
         title=title,
         xaxis={
-            'title': 'Time (UTC+7)',
             'showgrid': True,
             'gridcolor': '#e1e8ed',
             'range': [day_start, day_end] if day_start and day_end else None

@@ -20,6 +20,9 @@ if df is None or df.empty:
 print(f"Total rows: {len(df)}")
 print(f"Columns: {df.columns.tolist()}")
 
+# Prefer lunch-gap-adjusted timestamps if available
+time_col = 'effective_timestamp' if 'effective_timestamp' in df.columns else 'timestamp'
+
 # Check last few predictions
 for i in range(max(0, len(df) - 5), len(df)):
     if i < 1:
@@ -28,8 +31,8 @@ for i in range(max(0, len(df) - 5), len(df)):
     row = df.iloc[i]
     prev_row = df.iloc[i-1]
 
-    # Calculate time span in minutes
-    time_span_ms = row['timestamp'] - prev_row['timestamp']
+    # Calculate time span in minutes (using adjusted timestamps if available)
+    time_span_ms = row[time_col] - prev_row[time_col]
     time_span_min = time_span_ms / (60 * 1000)
 
     # Calculate rates

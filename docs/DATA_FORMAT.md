@@ -9,13 +9,13 @@ This document describes the SSI HOSE BUSD data format used in the VWAP predictio
 **Location**: `/d/data/ssi/ws/`
 **File Pattern**: `YYYY_MM_DD_ssi_hose_busd.received.txt`
 **Format**: Line-delimited JSON
-**Time Period**: May 2024 - November 2025 (post-KRX integration)
+**Time Period**: May 2025 - November 2025 (post-KRX integration)
 **Timezone**: UTC (converted to UTC+7 for display)
 
 ### Example Files
 ```
 /d/data/ssi/ws/2025_11_27_ssi_hose_busd.received.txt
-/d/data/ssi/ws/2024_05_15_ssi_hose_busd.received.txt
+/d/data/ssi/ws/2025_05_15_ssi_hose_busd.received.txt
 ```
 
 ## Raw Data Format
@@ -86,6 +86,7 @@ The `payloadData` field contains pipe-delimited values:
 - **Timezone**: UTC
 - **Display**: Converted to Asia/Bangkok (UTC+7)
 - **Example**: 1732675200123 = 2025-11-27 09:00:00.123 UTC+7
+- **Requirement**: Parser drops messages that do not contain `serverTime`, so pre-KRX data (April 2025 and earlier) cannot be processed
 
 ## Parsed Data Structure
 
@@ -242,7 +243,7 @@ Vietnam stock market (HOSE) operates in UTC+7 timezone:
 - **Data**: Only use post-KRX data for consistency
 
 ### Data Availability
-- **Range**: May 2024 - November 2025
+- **Range**: May 2025 - November 2025 (post-KRX serverTime data only)
 - **Coverage**: All HOSE trading days
 - **Quality**: Production-grade SSI WebSocket feed
 

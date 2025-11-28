@@ -19,7 +19,7 @@ class Bubble:
         volume: Matching volume
         price: Trade price
         serverTime: Server timestamp in microseconds (for detection)
-        timestamp: Timestamp in milliseconds (for output)
+        timestamp: HOSE server timestamp in milliseconds (for output)
         side: Trade side - 'bu' (buy up) or 'sd' (sell down)
         is_vwap: Flag indicating if this bubble is part of a VWAP pattern
     """
@@ -36,7 +36,7 @@ def parse_ssi_busd_line(line: str) -> Optional[Bubble]:
     """
     Parse a single line from SSI HOSE BUSD JSON stream.
 
-    Expected format:
+    Expected format (post-KRX, includes serverTime payload at index 12):
     {
       "timestamp": 1697681700817,
       "data": {
@@ -71,11 +71,6 @@ def parse_ssi_busd_line(line: str) -> Optional[Bubble]:
         # Parse JSON
         msg = json.loads(line.strip())
 
-        # Extract timestamp (milliseconds)
-        timestamp_ms = msg.get('timestamp')
-        if timestamp_ms is None:
-            return None
-
         # Extract payloadData
         payload_data = msg.get('data', {}).get('response', {}).get('payloadData')
         if not payload_data:
@@ -84,8 +79,8 @@ def parse_ssi_busd_line(line: str) -> Optional[Bubble]:
         # Parse pipe-delimited payload
         fields = payload_data.split('|')
 
-        # Validate minimum fields
-        if len(fields) < 8:
+        # Validate minimum fields (need serverTime at index 12)
+        if len(fields) < 13:
             return None
 
         # Check if this is a MAIN lot trade
@@ -110,18 +105,14 @@ def parse_ssi_busd_line(line: str) -> Optional[Bubble]:
             return None
 
         # Extract serverTime (convert from milliseconds to microseconds for detection)
-        server_time_ms = None
-        if len(fields) >= 13:
-            try:
-                server_time_ms = int(fields[12])
-            except (ValueError, IndexError):
-                pass
+        try:
+            server_time_ms = int(fields[12])
+        except (ValueError, IndexError):
+            return None
 
-        # Use serverTime if available, otherwise use timestamp
-        if server_time_ms is not None:
-            server_time_us = server_time_ms * 1000  # milliseconds to microseconds
-        else:
-            server_time_us = timestamp_ms * 1000
+        # serverTime is mandatory in post-KRX data
+        server_time_us = server_time_ms * 1000  # milliseconds to microseconds
+        timestamp_ms = server_time_ms
 
         # Validate volume and price
         if volume <= 0 or price <= 0:

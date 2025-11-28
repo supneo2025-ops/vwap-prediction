@@ -42,6 +42,18 @@ Welcome to the VWAP Prediction System documentation. This system provides real-t
 
 **Read this** to understand the evolution and design decisions.
 
+### 4. [Analytics Guide](ANALYTICS_GUIDE.md)
+**Complete guide for using the system for data analysis and research**
+
+- GUI-based control (no manual tmux required)
+- Accessing data programmatically via Ray
+- Example analytics workflows
+- Real-time monitoring and data export
+- Prediction accuracy evaluation
+- Best practices and tips
+
+**Read this** if you want to perform analytics, research, or custom analysis on VWAP data.
+
 ## Quick Navigation
 
 ### For New Users
@@ -59,10 +71,11 @@ Welcome to the VWAP Prediction System documentation. This system provides real-t
    - `core/predictor.py` - VWAPPredictor
    - `core/parser.py` - SSI BUSD parser
 
-### For Researchers
-1. [Historical Comparison](HISTORICAL_COMPARISON.md) - Evolution and design choices
-2. [Algorithm](ALGORITHM.md) - Detection and prediction methodology
-3. [Data Format](DATA_FORMAT.md) - Data specifications
+### For Researchers & Analysts
+1. [Analytics Guide](ANALYTICS_GUIDE.md) - **START HERE** for data analysis workflows
+2. [Historical Comparison](HISTORICAL_COMPARISON.md) - Evolution and design choices
+3. [Algorithm](ALGORITHM.md) - Detection and prediction methodology
+4. [Data Format](DATA_FORMAT.md) - Data specifications
 
 ## Key Concepts
 
@@ -159,7 +172,8 @@ Use the day selector in the dashboard to switch between available dates.
 - Only `MAIN` lot trades
 - Volume ≥ 200 shares
 - Time cutoff at 14:40:00
-- Post-KRX data only (May 2024+)
+- Post-KRX data only (May 2025+) because HOSE added the `serverTime` field at the KRX cutover
+- April 2025 and earlier files lack `serverTime` and will be skipped by the parser
 
 ### Timezone
 - Raw data: UTC

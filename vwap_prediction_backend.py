@@ -7,7 +7,7 @@ detects VWAP patterns, generates predictions, and saves
 results to Ray shared memory for frontend visualization.
 
 Usage:
-    cat /d/data/ssi/ws/2024_05_*_ssi_hose_busd.received.txt | python vwap_prediction_backend.py
+    cat /d/data/ssi/ws/2025_05_*_ssi_hose_busd.received.txt | python vwap_prediction_backend.py
 """
 
 import sys
@@ -75,7 +75,7 @@ class VWAPPredictionBackend:
 
         # Replay speed control - timestamp-based
         self.replay_speed_multiplier = replay_speed_multiplier
-        self.prev_bubble_timestamp = None
+        self.prev_effective_timestamp = None
         self.replay_start_wallclock = None
         self.replay_start_data_timestamp = None
 
@@ -84,6 +84,18 @@ class VWAPPredictionBackend:
 
         # Data buffer for building timeseries
         self.timeseries_data = []
+        self.history_points = []
+
+        # Lunch break compression (skip 11:30 - 13:00 gap)
+        self.lunch_start_hour = 11
+        self.lunch_start_minute = 30
+        self.lunch_end_hour = 13
+        self.lunch_end_minute = 0
+        self.lunch_gap_ms = (
+            ((self.lunch_end_hour * 60 + self.lunch_end_minute) -
+             (self.lunch_start_hour * 60 + self.lunch_start_minute))
+            * 60 * 1000
+        )
 
         # Current rates (for display)
         self.current_rates = {
@@ -130,6 +142,13 @@ class VWAPPredictionBackend:
                 self._cutoff_logged = True
             return False
 
+        actual_timestamp = bubble.timestamp
+        effective_timestamp = self._get_effective_timestamp(bubble_dt, actual_timestamp)
+
+        # Override bubble timestamp with lunch-gap-adjusted timestamp for detection/replay
+        bubble.market_timestamp = actual_timestamp  # store original for reference
+        bubble.timestamp = effective_timestamp
+
         # Add to detector and get current state
         current_state = self.detector.add_bubble(bubble)
 
@@ -137,9 +156,9 @@ class VWAPPredictionBackend:
         self.bubbles_processed += 1
 
         # Timestamp-based replay speed control
-        if self.prev_bubble_timestamp is not None:
+        if self.prev_effective_timestamp is not None:
             # Calculate time difference in the data
-            data_time_diff_ms = bubble.timestamp - self.prev_bubble_timestamp
+            data_time_diff_ms = bubble.timestamp - self.prev_effective_timestamp
             data_time_diff_sec = data_time_diff_ms / 1000.0
 
             # Calculate how long to sleep (scaled by speed multiplier)
@@ -149,11 +168,16 @@ class VWAPPredictionBackend:
                 time.sleep(sleep_duration)
 
         # Update previous timestamp
-        self.prev_bubble_timestamp = bubble.timestamp
+        self.prev_effective_timestamp = bubble.timestamp
 
         # Check if it's time to generate prediction (based on data time, not wall-clock)
         if bubble.timestamp - self.last_prediction_data_timestamp >= self.prediction_interval_ms:
-            self._generate_and_save_prediction(current_state)
+            self._generate_and_save_prediction(
+                current_state=current_state,
+                actual_timestamp=actual_timestamp,
+                actual_datetime=bubble_dt,
+                effective_timestamp=effective_timestamp
+            )
             self.last_prediction_data_timestamp = bubble.timestamp
 
         # Log progress periodically
@@ -168,31 +192,32 @@ class VWAPPredictionBackend:
 
         return True
 
-    def _generate_and_save_prediction(self, current_state):
+    def _generate_and_save_prediction(self, current_state, actual_timestamp, actual_datetime, effective_timestamp):
         """
         Generate predictions and save to Ray shared memory.
 
         Args:
             current_state: Current VWAPState from detector
+            actual_timestamp: Original market timestamp (ms)
+            actual_datetime: Original market datetime (Asia/Bangkok)
+            effective_timestamp: Lunch-gap-adjusted timestamp (ms) for rate calculations
         """
-        # Build current data row
-        current_row = {
-            'timestamp': current_state.timestamp,
+        # Track history using lunch-gap-adjusted timestamp for smoother rates
+        history_entry = {
+            'timestamp': effective_timestamp,
             'bu_current': current_state.bu_vwap,
             'sd_current': current_state.sd_vwap,
             'busd_current': current_state.busd_vwap,
         }
+        self.history_points.append(history_entry)
 
-        # Create history including current state for rate calculation
-        history_with_current = self.timeseries_data + [current_row]
-
-        # Generate predictions with history INCLUDING current state
-        predictions = self.predictor.predict(current_state, recent_history=history_with_current)
+        # Generate predictions with smoothed history (lunch gap removed)
+        predictions = self.predictor.predict(current_state, recent_history=self.history_points)
 
         # Calculate and save current rates for display
-        if len(history_with_current) >= 2:
-            last_point = history_with_current[-1]
-            prev_point = history_with_current[-2]
+        if len(self.history_points) >= 2:
+            last_point = self.history_points[-1]
+            prev_point = self.history_points[-2]
             time_span_ms = last_point['timestamp'] - prev_point['timestamp']
             time_span_min = time_span_ms / (60 * 1000)
 
@@ -200,12 +225,13 @@ class VWAPPredictionBackend:
                 self.current_rates['bu_rate'] = (last_point['bu_current'] - prev_point['bu_current']) / time_span_min
                 self.current_rates['sd_rate'] = (last_point['sd_current'] - prev_point['sd_current']) / time_span_min
                 self.current_rates['busd_rate'] = (last_point['busd_current'] - prev_point['busd_current']) / time_span_min
-                self.current_rates['timestamp'] = current_state.timestamp
+                self.current_rates['timestamp'] = actual_timestamp
 
         # Build full data row with UTC+7 timezone
         row_data = {
-            'timestamp': current_state.timestamp,
-            'datetime': pd.to_datetime(current_state.timestamp, unit='ms', utc=True).tz_convert('Asia/Bangkok'),
+            'timestamp': actual_timestamp,
+            'effective_timestamp': effective_timestamp,
+            'datetime': actual_datetime,
             'bu_current': current_state.bu_vwap,
             'sd_current': current_state.sd_vwap,
             'busd_current': current_state.busd_vwap,
@@ -217,9 +243,8 @@ class VWAPPredictionBackend:
             row_data[f'bu_pred_{horizon}min'] = pred.bu_pred
             row_data[f'sd_pred_{horizon}min'] = pred.sd_pred
             row_data[f'busd_pred_{horizon}min'] = pred.busd_pred
-            # Add prediction datetime (15 minutes into future)
-            pred_timestamp = current_state.timestamp + (horizon * 60 * 1000)  # Convert minutes to ms
-            row_data[f'pred_datetime_{horizon}min'] = pd.to_datetime(pred_timestamp, unit='ms', utc=True).tz_convert('Asia/Bangkok')
+            # Add prediction datetime (15 minutes into future) using actual market time
+            row_data[f'pred_datetime_{horizon}min'] = actual_datetime + pd.Timedelta(minutes=horizon)
 
         # Append to timeseries
         self.timeseries_data.append(row_data)
@@ -244,6 +269,33 @@ class VWAPPredictionBackend:
                 )
         except Exception as e:
             logger.error(f"Error saving to Ray shared memory: {e}")
+
+    def _get_effective_timestamp(self, bubble_dt: pd.Timestamp, actual_timestamp: int) -> int:
+        """
+        Compress lunch break (11:30-13:00) so replay/prediction timelines skip the gap.
+
+        Args:
+            bubble_dt: Market timestamp localized to Asia/Bangkok
+            actual_timestamp: Original HOSE timestamp in milliseconds
+
+        Returns:
+            Lunch-gap-adjusted timestamp in milliseconds
+        """
+        local_dt = bubble_dt.tz_convert('Asia/Bangkok')
+        day_start = local_dt.normalize()
+
+        lunch_start = day_start + pd.Timedelta(hours=self.lunch_start_hour, minutes=self.lunch_start_minute)
+        lunch_end = day_start + pd.Timedelta(hours=self.lunch_end_hour, minutes=self.lunch_end_minute)
+
+        lunch_start_ms = int(lunch_start.value // 1_000_000)
+        lunch_end_ms = int(lunch_end.value // 1_000_000)
+
+        if actual_timestamp <= lunch_start_ms:
+            return actual_timestamp
+        if actual_timestamp <= lunch_end_ms:
+            return lunch_start_ms
+
+        return actual_timestamp - (lunch_end_ms - lunch_start_ms)
 
     def run(self):
         """
