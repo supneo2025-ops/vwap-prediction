@@ -101,7 +101,12 @@ def restart_backend(day: str, speed: float):
 
 
 # Create Dash app
-app = Dash(__name__)
+app = Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    serve_locally=False,  # Use CDN for faster plotly.js loading
+    update_title=None,  # Disable "Updating..." in title
+)
 app.title = "VWAP Prediction Dashboard"
 
 # Get available days for dropdown
@@ -118,14 +123,14 @@ app.layout = html.Div([
     html.Div([
         # Day selector
         html.Div([
-            html.Label("Trading Day", style={'fontWeight': 'bold', 'fontSize': '13px'}),
+            html.Label("Trading Day", style={'fontWeight': 'bold', 'fontSize': '13px', 'marginBottom': '4px', 'display': 'block'}),
             dcc.Dropdown(
                 id='day-selector',
                 options=[{'label': day, 'value': day} for day in available_days],
                 value=available_days[0] if available_days else None,
                 style={'width': '190px'}
             )
-        ], style={'minWidth': '190px'}),
+        ], style={'width': '200px', 'display': 'flex', 'flexDirection': 'column', 'flexShrink': 0}),
 
         # Speed selector
         html.Div([
@@ -201,17 +206,17 @@ app.layout = html.Div([
 
     # BU VWAP Chart
     html.Div([
-        dcc.Graph(id='bu-vwap-chart', style={'height': '380px'}),
+        dcc.Graph(id='bu-vwap-chart', style={'height': '380px'}, config={'displayModeBar': False}),
     ], style={'padding': '0 10px 20px'}),
 
     # SD VWAP Chart
     html.Div([
-        dcc.Graph(id='sd-vwap-chart', style={'height': '380px'}),
+        dcc.Graph(id='sd-vwap-chart', style={'height': '380px'}, config={'displayModeBar': False}),
     ], style={'padding': '0 10px 20px'}),
 
     # BUSD VWAP Chart
     html.Div([
-        dcc.Graph(id='busd-vwap-chart', style={'height': '380px'}),
+        dcc.Graph(id='busd-vwap-chart', style={'height': '380px'}, config={'displayModeBar': False}),
     ], style={'padding': '0 10px 20px'}),
 
     # Legend
@@ -223,12 +228,11 @@ app.layout = html.Div([
         ], style={'fontSize': '12px', 'color': '#7f8c8d'})
     ], style={'padding': '20px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px', 'margin': '20px'}),
 
-    # Auto-refresh component - updates every 200ms (fast enough for up to 75x speed)
-    # At 50x speed: 15s data time = 0.3s wall-clock, so 200ms catches 1-2 updates
-    # At 100x speed: 15s data time = 0.15s wall-clock, close to 200ms
+    # Auto-refresh component - updates every 1 second
+    # Reduced from 200ms to reduce network traffic (80% reduction)
     dcc.Interval(
         id='interval-component',
-        interval=200,  # 200 milliseconds = 0.2 seconds
+        interval=1000,  # 1000 milliseconds = 1 second
         n_intervals=0
     )
 ], style={'fontFamily': 'Arial, sans-serif', 'backgroundColor': '#f8f9fa', 'padding': '20px'})
@@ -398,14 +402,8 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
 
     if 'datetime' in df.columns:
         x_actual = df['datetime']
-        # Set x-axis range for full trading day (9:00 - 15:00)
-        first_datetime = pd.to_datetime(df['datetime'].iloc[0])
-        day_start = first_datetime.replace(hour=9, minute=0, second=0, microsecond=0)
-        day_end = first_datetime.replace(hour=15, minute=0, second=0, microsecond=0)
     else:
         x_actual = df['timestamp']
-        day_start = None
-        day_end = None
 
     # Actual VWAP values
     y_actual = df[f'{vwap_type}_current']
@@ -458,7 +456,9 @@ def create_vwap_chart(df, vwap_type, color_actual, color_pred, title):
         xaxis={
             'showgrid': True,
             'gridcolor': '#e1e8ed',
-            'range': [day_start, day_end] if day_start and day_end else None
+            'rangebreaks': [
+                dict(bounds=[11.5, 13], pattern="hour")  # Hide lunch break 11:30-13:00
+            ]
         },
         yaxis={
             'title': 'VWAP (Billions)',
@@ -528,7 +528,9 @@ def main():
     app.run(
         debug=False,
         host='0.0.0.0',
-        port=8050
+        port=8050,
+        dev_tools_hot_reload=False,  # Disable hot reload
+        dev_tools_serve_dev_bundles=False,  # Use production bundles
     )
 
 
